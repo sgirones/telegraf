@@ -15,6 +15,8 @@ type Ipmi struct {
 	runner  Runner
 }
 
+var replacer = strings.NewReplacer(" ", "_")
+
 var sampleConfig = `
   ## specify servers via a url matching:
   ##  [username[:password]@][protocol[(address)]]
@@ -65,7 +67,7 @@ func (m *Ipmi) gatherServer(serv string, acc telegraf.Accumulator) error {
 	for i := 0; i < len(lines); i++ {
 		vals := strings.Split(lines[i], "|")
 		if len(vals) == 3 {
-			tags := map[string]string{"server": conn.Hostname, "name": trim(vals[0])}
+			tags := map[string]string{"server": conn.Hostname, "name": transform(vals[0])}
 			fields := make(map[string]interface{})
 			if strings.EqualFold("ok", trim(vals[2])) {
 				fields["status"] = 1
@@ -76,8 +78,11 @@ func (m *Ipmi) gatherServer(serv string, acc telegraf.Accumulator) error {
 			val1 := trim(vals[1])
 
 			if strings.Index(val1, " ") > 0 {
-				val := strings.Split(val1, " ")[0]
-				fields["value"] = Atofloat(val)
+				valunit := strings.SplitN(val1, " ", 2)
+				fields["value"] = Atofloat(valunit[0])
+				if len(valunit) > 1 {
+					tags["units"] = transform(valunit[1])
+				}
 			} else {
 				fields["value"] = 0.0
 			}
@@ -104,6 +109,12 @@ func Atofloat(val string) float64 {
 
 func trim(s string) string {
 	return strings.TrimSpace(s)
+}
+
+func transform(s string) string {
+	s = trim(s)
+	s = strings.ToLower(s)
+	return replacer.Replace(s)
 }
 
 func init() {
